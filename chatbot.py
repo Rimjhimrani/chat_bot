@@ -1,108 +1,119 @@
 import streamlit as st
+from openai import OpenAI
 
-# --- 1. CONFIG & SETTINGS ---
-st.set_page_config(page_title="Global SCM Expert", page_icon="🌐", layout="wide")
+# --- CONFIGURATION ---
+st.set_page_config(page_title="Supply Chain Survey Bot", layout="centered")
+st.title("📋 Industry Survey Assistant")
 
-# Custom CSS for a professional look
-st.markdown("""
-    <style>
-    .stButton>button { width: 100%; border-radius: 10px; height: 3em; background-color: #f0f2f6; border: 1px solid #d1d5db; }
-    .stButton>button:hover { background-color: #e5e7eb; border-color: #3b82f6; }
-    .stInfo { background-color: #eff6ff; border-left-color: #3b82f6; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- 2. THE EXPANDED KNOWLEDGE BASE ---
-SCM_DATA = {
-    "Fundamentals & Strategy 🏢": {
-        "What is SCM?": "Supply Chain Management is the handling of the entire production flow of a good—from raw materials to delivering the final product to the consumer.",
-        "SCM vs Logistics?": "Logistics is a subset of SCM. Logistics focuses on movement and storage, while SCM covers sourcing, production, and strategy.",
-        "What is the Bullwhip Effect?": "A phenomenon where small fluctuations in demand at the retail level cause larger fluctuations at the wholesale and manufacturer levels.",
-        "What is Lead Time?": "The total time from placing an order until it is received. Reducing lead time is a key goal in supply chain optimization.",
-        "What is Vertical Integration?": "When a company owns multiple stages of its supply chain (e.g., a car maker owning a tire factory) to control costs and quality.",
-        "Define Supply Chain Resilience": "The ability of a supply chain to adapt to and recover from disruptions (like pandemics or disasters) while maintaining continuity."
+# --- FULL DATA EXTRACTION FROM YOUR SCREENSHOT ---
+SURVEY_DATA = {
+    "Layer_1": {
+        "question": "Which industry does your organization operate in?",
+        "options": ["Manufacturing", "FMCG", "Retail & E-commerce", "Logistics & 3PL", "Pharmaceuticals & Healthcare"]
     },
-    "Inventory & Planning 📉": {
-        "What is Safety Stock?": "Extra inventory held as a buffer to prevent stockouts caused by unexpected demand spikes or supply delays.",
-        "Explain JIT (Just-in-Time)": "A 'pull' system where materials are ordered only as needed for production, reducing waste and holding costs.",
-        "What is EOQ?": "Economic Order Quantity—the ideal order size that minimizes both ordering and holding costs.",
-        "What is ABC Analysis?": "Categorizing inventory: A (high value, low volume), B (moderate), and C (low value, high volume) to focus management efforts.",
-        "What is Demand Forecasting?": "Using historical data and trends to predict future customer demand to plan production and inventory.",
-        "What is VMI (Vendor Managed Inventory)?": "A system where the supplier monitors the buyer’s inventory and automatically replenishes it as needed."
+    "Layer_2": {
+        "question": "Q1. Select your organization size:",
+        "sub_questions": [
+            "By Employee Strength: Micro (<50), Small (51-250), Medium (251-1,000), Large (1,001-5,000), Enterprise (5,000+)",
+            "OR By Annual Turnover: <₹50 Cr, ₹50-250 Cr, ₹1,000+ Cr"
+        ]
     },
-    "Logistics & Distribution 🚛": {
-        "3PL vs 4PL?": "3PL handles logistics tasks (shipping/warehousing). 4PL manages the entire supply chain, including other 3PL providers.",
-        "What is Reverse Logistics?": "The process of moving goods from the customer back to the seller for returns, repairs, or recycling.",
-        "Define Cross-Docking": "Unloading goods from an incoming vehicle and loading them directly into outbound vehicles with zero storage time.",
-        "What is Last Mile Delivery?": "The final step of the delivery process from a distribution hub to the customer's doorstep—often the most expensive part.",
-        "Explain Cold Chain": "A temperature-controlled supply chain used for perishable goods like vaccines or fresh food.",
-        "What is Intermodal Transport?": "Using two or more modes of transport (e.g., ship and truck) to move goods without handling the freight itself."
+    "Industry_Specific": {
+        "Manufacturing": [
+            "Q2. Number of manufacturing plants?",
+            "Q3. Production model followed? (Make-to-Stock, Make-to-Order, Mixed)",
+            "Q4. What challenges are you currently facing? (Options: High inventory/stockouts, Poor material flow, Manual processes, Low productivity, Poor traceability, High logistics cost, Space constraints)",
+            "Q5. Which area needs improvement? (Options: Inventory management, Warehouse & line feeding, Logistics & transportation, Production planning, Supplier management, Visibility & traceability, Cost optimization)"
+        ],
+        "FMCG": [
+            "Q2. Distribution model? (Direct, Distributor, Hybrid)",
+            "Q3. What challenges are you currently facing? (Options: Low forecast accuracy, High inventory holding, Expiry/freshness issues, High distribution cost, Inefficient replenishment, Poor visibility, Warehouse congestion, Packaging damage, Service level issues)",
+            "Q4. Which areas of your FMCG supply chain need improvement? (Options: Demand forecasting, Inventory optimization, Production planning, Distributor replenishment, Warehouse operations, Packaging efficiency, Transportation cost, Service level (Fill rate/OTIF), Data visibility)"
+        ],
+        "Retail & E-commerce": [
+            "Q2. No of warehouses?",
+            "Q3. Order fulfillment model? (Central DC, Dark Store, Store Fulfillment)",
+            "Q4. Warehouse automation level? (Manual, Semi-auto, Fully automated)",
+            "Q5. Sales channels served? (Online, Offline, Omnichannel) AND what key challenges? (Stock-outs, Inventory accuracy, SLA breaches, High delivery cost, High returns/RTO, Slow processing, Congestion, Packaging damage, Limited visibility, Tech gaps)",
+            "Q6. Which areas of operations need improvement? (Demand planning, Inventory control, Omnichannel visibility, Order orchestration, Warehouse ops, Picking/dispatch, Last-mile, Returns, Packaging, Tech systems, Analytics, Cost optimization, Customer experience, Scalability)"
+        ],
+        "Logistics & 3PL": [
+            "Q2. No of warehouses?",
+            "Q3. Service offerings? (Transportation, Warehousing, End-to-end SCM)",
+            "Q4. Industries and customer segments served?",
+            "Q5. Geographic network coverage? (Domestic, International)",
+            "Q6. Pricing model used? (Fixed, Variable, Activity-based)",
+            "Q7. Key operational challenges? (Utilization, High operating costs, OTIF performance, Empty miles, Labor efficiency, Penalties, Visibility, System integration, Damage/Claims, Capacity constraints)",
+            "Q8. Which areas need improvement? (Transport planning, Fleet management, Route design, Warehouse ops, Labor planning, Order management, Cost management, Tech platforms, Data analytics, Visibility dashboards, Quality/Compliance, Scalability, Sustainability)"
+        ],
+        "Pharmaceuticals & Healthcare": [
+            "Q2. Number of plants?",
+            "Q3. Product category handled? (Formulations, API, Medical devices)",
+            "Q4. Temperature-controlled supply chain? (Yes, Partial, No)",
+            "Q5. Temperature-controlled storage coverage?",
+            "Q6. Production model followed? (Make-to-Stock, Make-to-Order, Mixed)",
+            "Q7. Key operational challenges? (Forecast inaccuracy, Expiry risk, Batch release delays, Cold chain compliance, Traceability, High distribution cost, Manual processes, Recall readiness, Real-time visibility)",
+            "Q8. Which areas need improvement? (Demand planning, Inventory management, Shelf-life & FEFO, Batch planning, Cold chain ops, Distribution, Quality/Compliance, Traceability, Tech/Data visibility, Cost optimization)"
+        ]
     },
-    "Procurement & Sourcing 🤝": {
-        "What is Strategic Sourcing?": "A procurement process that continuously improves and re-evaluates purchasing activities to find the best value.",
-        "Procurement vs Purchasing?": "Purchasing is the transactional act of buying. Procurement is the strategic process of sourcing, negotiating, and relationship management.",
-        "What is an RFP?": "Request for Proposal—a document used to solicit bids from potential suppliers for a specific project or service.",
-        "Define TCO (Total Cost of Ownership)": "The total cost of an asset over its life, including purchase price, shipping, storage, maintenance, and disposal.",
-        "Explain Dual Sourcing": "Using two different suppliers for the same component to reduce risk if one supplier fails.",
-        "What are Procurement KPIs?": "Metrics like cost savings, supplier quality, delivery performance, and contract compliance."
-    },
-    "Tech & Sustainability 🤖": {
-        "What is a Digital Twin?": "A virtual replica of the physical supply chain used to simulate scenarios and predict disruptions.",
-        "Blockchain in SCM?": "Used for 'Traceability'—creating an unchangeable record of every transaction or movement of a product.",
-        "IoT in Warehousing?": "Sensors and connected devices that track inventory location, temperature, and shelf life in real-time.",
-        "What is Green Supply Chain?": "Integrating environmentally friendly practices into all stages of SCM, from product design to logistics.",
-        "Define Circular Supply Chain": "A model where products are returned, refurbished, and put back into the supply chain to minimize waste.",
-        "Role of AI in SCM?": "Used for automated demand forecasting, route optimization, and predictive maintenance of delivery fleets."
-    }
+    "Layer_4": "Q. Final Details: Please provide your Name, Company, Email, Phone and a preferred Date/Time for a schedule meeting."
 }
 
-# --- 3. SESSION STATE ---
+# --- SESSION STATE ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! I am your **Global Supply Chain Expert**. Choose a category to start your learning journey."}]
-if "selected_category" not in st.session_state:
-    st.session_state.selected_category = None
+    st.session_state.messages = [{"role": "assistant", "content": f"Hello! Let's get started. {SURVEY_DATA['Layer_1']['question']} \n\nOptions: {', '.join(SURVEY_DATA['Layer_1']['options'])}"}]
+if "industry" not in st.session_state:
+    st.session_state.industry = None
 
-# --- 4. DISPLAY CHAT HISTORY ---
-st.write("### 💬 Expert Conversation")
-chat_placeholder = st.container(height=400, border=True)
-with chat_placeholder:
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-# --- 5. THE OPTION MENU ---
-st.write("---")
-st.subheader("🛠️ Control Panel")
-
-# Step 1: Choose Category
-st.write("**Step 1: Choose a Topic Category**")
-cat_cols = st.columns(len(SCM_DATA))
-for i, category in enumerate(SCM_DATA.keys()):
-    if cat_cols[i].button(category):
-        st.session_state.selected_category = category
-
-# Step 2: Choose Question
-if st.session_state.selected_category:
-    st.write(f"**Step 2: Choose a question about {st.session_state.selected_category}**")
-    questions = SCM_DATA[st.session_state.selected_category]
-    
-    # Show questions in a grid (3 per row)
-    q_cols = st.columns(3)
-    for idx, (question, answer) in enumerate(questions.items()):
-        col_idx = idx % 3
-        if q_cols[col_idx].button(f"❓ {question}", key=f"q_{idx}"):
-            # Update Chat History
-            st.session_state.messages.append({"role": "user", "content": question})
-            st.session_state.messages.append({"role": "assistant", "content": answer})
-            st.rerun()
-
-# --- 6. SIDEBAR TOOLS ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3063/3063822.png", width=100)
-    st.title("Admin Panel")
-    if st.button("🗑️ Clear Chat History"):
-        st.session_state.messages = [{"role": "assistant", "content": "Chat reset. How can I help you today?"}]
-        st.session_state.selected_category = None
+    st.header("Settings")
+    api_key = st.text_input("Enter OpenAI API Key", type="password")
+    if not api_key:
+        st.info("Enter your OpenAI API key to interact with the bot.")
+    st.divider()
+    if st.button("Clear Chat"):
+        st.session_state.messages = [{"role": "assistant", "content": f"Hello! Let's get started. {SURVEY_DATA['Layer_1']['question']}"}]
+        st.session_state.industry = None
         st.rerun()
-    st.write("---")
-    st.info("This bot uses a predefined knowledge base. You can expand it by adding more items to the `SCM_DATA` dictionary in the code.")
+
+# --- CHAT ENGINE ---
+client = OpenAI(api_key=api_key) if api_key else None
+
+def get_ai_response():
+    system_prompt = f"""
+    You are an expert Supply Chain Consultant. Your job is to conduct a survey based EXACTLY on this data structure: {SURVEY_DATA}.
+    
+    RULES:
+    1. Ask ONLY ONE question at a time.
+    2. Follow the sequence: Layer 1 -> Layer 2 -> Layer 3 (Specific to the chosen industry) -> Layer 4.
+    3. If the user mentions one of the industries ({SURVEY_DATA['Layer_1']['options']}), remember it and use it to ask the correct Q2, Q3, etc. from 'Industry_Specific'.
+    4. Be professional but brief.
+    """
+    
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "system", "content": system_prompt}] + st.session_state.messages
+    )
+    return response.choices[0].message.content
+
+# --- UI LOGIC ---
+for msg in st.session_state.messages:
+    st.chat_message(msg["role"]).write(msg["content"])
+
+if prompt := st.chat_input():
+    if not api_key:
+        st.error("Please provide an API Key in the sidebar.")
+    else:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.chat_message("user").write(prompt)
+
+        # Logic to "lock in" the industry choice
+        for ind in SURVEY_DATA["Layer_1"]["options"]:
+            if ind.lower() in prompt.lower():
+                st.session_state.industry = ind
+
+        with st.chat_message("assistant"):
+            response = get_ai_response()
+            st.write(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
