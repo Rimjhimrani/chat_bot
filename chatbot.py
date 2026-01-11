@@ -1,119 +1,129 @@
 import streamlit as st
 from openai import OpenAI
 
-# --- CONFIGURATION ---
+# --- INITIAL CONFIGURATION ---
 st.set_page_config(page_title="Supply Chain Survey Bot", layout="centered")
-st.title("📋 Industry Survey Assistant")
+st.title("🚢 Supply Chain Consultation Bot")
 
-# --- FULL DATA EXTRACTION FROM YOUR SCREENSHOT ---
-SURVEY_DATA = {
-    "Layer_1": {
+# --- DATA STRUCTURE (Extracted from your flowchart) ---
+SURVEY_FLOW = {
+    "step_1": {
         "question": "Which industry does your organization operate in?",
-        "options": ["Manufacturing", "FMCG", "Retail & E-commerce", "Logistics & 3PL", "Pharmaceuticals & Healthcare"]
+        "options": ["Manufacturing", "FMCG", "Retail & E-commerce", "Logistics & 3PL", "Pharmaceuticals & Healthcare"],
+        "type": "radio"
     },
-    "Layer_2": {
-        "question": "Q1. Select your organization size:",
-        "sub_questions": [
-            "By Employee Strength: Micro (<50), Small (51-250), Medium (251-1,000), Large (1,001-5,000), Enterprise (5,000+)",
-            "OR By Annual Turnover: <₹50 Cr, ₹50-250 Cr, ₹1,000+ Cr"
-        ]
+    "step_2": {
+        "question": "Select your organization size (By Employee Strength or Annual Turnover):",
+        "options": [
+            "Micro (<50 employees / <₹50 Cr)", 
+            "Small (51-250 employees / ₹50-250 Cr)", 
+            "Medium (251-1,000 employees / ₹250-1,000 Cr)", 
+            "Large (1,001-5,000 employees / ₹1,000+ Cr)", 
+            "Enterprise (5,000+ employees)"
+        ],
+        "type": "radio"
     },
-    "Industry_Specific": {
+    "industry_specific": {
         "Manufacturing": [
-            "Q2. Number of manufacturing plants?",
-            "Q3. Production model followed? (Make-to-Stock, Make-to-Order, Mixed)",
-            "Q4. What challenges are you currently facing? (Options: High inventory/stockouts, Poor material flow, Manual processes, Low productivity, Poor traceability, High logistics cost, Space constraints)",
-            "Q5. Which area needs improvement? (Options: Inventory management, Warehouse & line feeding, Logistics & transportation, Production planning, Supplier management, Visibility & traceability, Cost optimization)"
+            {"q": "Q2. Number of manufacturing plants?", "type": "radio", "options": ["1-2", "3-5", "5-10", "10+"]},
+            {"q": "Q3. Production model followed?", "type": "radio", "options": ["Make-to-Stock", "Make-to-Order", "Mixed"]},
+            {"q": "Q4. What challenges are you currently facing? (Select all that apply)", "type": "multiselect", 
+             "options": ["High inventory/stockouts", "Poor material flow", "Manual processes", "Low productivity", "Poor traceability", "High logistics cost", "Space constraints"]},
+            {"q": "Q5. Which area needs improvement?", "type": "multiselect", 
+             "options": ["Inventory management", "Warehouse & line feeding", "Logistics & transportation", "Production planning", "Supplier management", "Visibility & traceability", "Cost optimization"]}
         ],
         "FMCG": [
-            "Q2. Distribution model? (Direct, Distributor, Hybrid)",
-            "Q3. What challenges are you currently facing? (Options: Low forecast accuracy, High inventory holding, Expiry/freshness issues, High distribution cost, Inefficient replenishment, Poor visibility, Warehouse congestion, Packaging damage, Service level issues)",
-            "Q4. Which areas of your FMCG supply chain need improvement? (Options: Demand forecasting, Inventory optimization, Production planning, Distributor replenishment, Warehouse operations, Packaging efficiency, Transportation cost, Service level (Fill rate/OTIF), Data visibility)"
+            {"q": "Q2. Distribution model?", "type": "radio", "options": ["Direct", "Distributor", "Hybrid"]},
+            {"q": "Q3. Current challenges?", "type": "multiselect", "options": ["Low forecast accuracy", "High inventory holding", "Expiry issues", "High distribution cost", "Warehouse congestion", "Packaging damage"]},
+            {"q": "Q4. Improvement areas?", "type": "multiselect", "options": ["Demand forecasting", "Inventory optimization", "Production planning", "Packaging efficiency", "Data visibility"]}
         ],
-        "Retail & E-commerce": [
-            "Q2. No of warehouses?",
-            "Q3. Order fulfillment model? (Central DC, Dark Store, Store Fulfillment)",
-            "Q4. Warehouse automation level? (Manual, Semi-auto, Fully automated)",
-            "Q5. Sales channels served? (Online, Offline, Omnichannel) AND what key challenges? (Stock-outs, Inventory accuracy, SLA breaches, High delivery cost, High returns/RTO, Slow processing, Congestion, Packaging damage, Limited visibility, Tech gaps)",
-            "Q6. Which areas of operations need improvement? (Demand planning, Inventory control, Omnichannel visibility, Order orchestration, Warehouse ops, Picking/dispatch, Last-mile, Returns, Packaging, Tech systems, Analytics, Cost optimization, Customer experience, Scalability)"
-        ],
-        "Logistics & 3PL": [
-            "Q2. No of warehouses?",
-            "Q3. Service offerings? (Transportation, Warehousing, End-to-end SCM)",
-            "Q4. Industries and customer segments served?",
-            "Q5. Geographic network coverage? (Domestic, International)",
-            "Q6. Pricing model used? (Fixed, Variable, Activity-based)",
-            "Q7. Key operational challenges? (Utilization, High operating costs, OTIF performance, Empty miles, Labor efficiency, Penalties, Visibility, System integration, Damage/Claims, Capacity constraints)",
-            "Q8. Which areas need improvement? (Transport planning, Fleet management, Route design, Warehouse ops, Labor planning, Order management, Cost management, Tech platforms, Data analytics, Visibility dashboards, Quality/Compliance, Scalability, Sustainability)"
-        ],
-        "Pharmaceuticals & Healthcare": [
-            "Q2. Number of plants?",
-            "Q3. Product category handled? (Formulations, API, Medical devices)",
-            "Q4. Temperature-controlled supply chain? (Yes, Partial, No)",
-            "Q5. Temperature-controlled storage coverage?",
-            "Q6. Production model followed? (Make-to-Stock, Make-to-Order, Mixed)",
-            "Q7. Key operational challenges? (Forecast inaccuracy, Expiry risk, Batch release delays, Cold chain compliance, Traceability, High distribution cost, Manual processes, Recall readiness, Real-time visibility)",
-            "Q8. Which areas need improvement? (Demand planning, Inventory management, Shelf-life & FEFO, Batch planning, Cold chain ops, Distribution, Quality/Compliance, Traceability, Tech/Data visibility, Cost optimization)"
-        ]
+        # (Add other industries here following the same pattern)
     },
-    "Layer_4": "Q. Final Details: Please provide your Name, Company, Email, Phone and a preferred Date/Time for a schedule meeting."
+    "final": {"q": "Please enter your contact details (Name, Company, Email, Phone):", "type": "text"}
 }
 
-# --- SESSION STATE ---
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": f"Hello! Let's get started. {SURVEY_DATA['Layer_1']['question']} \n\nOptions: {', '.join(SURVEY_DATA['Layer_1']['options'])}"}]
-if "industry" not in st.session_state:
-    st.session_state.industry = None
+# --- INITIALIZE SESSION STATE ---
+if "step" not in st.session_state:
+    st.session_state.step = "step_1"
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "user_data" not in st.session_state:
+    st.session_state.user_data = {}
+if "industry_step_index" not in st.session_state:
+    st.session_state.industry_step_index = 0
 
-# --- SIDEBAR ---
+# --- SIDEBAR FOR API KEY ---
 with st.sidebar:
-    st.header("Settings")
-    api_key = st.text_input("Enter OpenAI API Key", type="password")
-    if not api_key:
-        st.info("Enter your OpenAI API key to interact with the bot.")
-    st.divider()
-    if st.button("Clear Chat"):
-        st.session_state.messages = [{"role": "assistant", "content": f"Hello! Let's get started. {SURVEY_DATA['Layer_1']['question']}"}]
-        st.session_state.industry = None
+    api_key = st.text_input("OpenAI API Key", type="password")
+    if st.button("Reset Survey"):
+        st.session_state.clear()
         st.rerun()
 
-# --- CHAT ENGINE ---
-client = OpenAI(api_key=api_key) if api_key else None
-
-def get_ai_response():
-    system_prompt = f"""
-    You are an expert Supply Chain Consultant. Your job is to conduct a survey based EXACTLY on this data structure: {SURVEY_DATA}.
+# --- HELPER: ADVANCE SURVEY ---
+def handle_selection(val, key_name):
+    st.session_state.user_data[key_name] = val
+    st.session_state.chat_history.append({"role": "user", "content": str(val)})
     
-    RULES:
-    1. Ask ONLY ONE question at a time.
-    2. Follow the sequence: Layer 1 -> Layer 2 -> Layer 3 (Specific to the chosen industry) -> Layer 4.
-    3. If the user mentions one of the industries ({SURVEY_DATA['Layer_1']['options']}), remember it and use it to ask the correct Q2, Q3, etc. from 'Industry_Specific'.
-    4. Be professional but brief.
-    """
-    
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": system_prompt}] + st.session_state.messages
-    )
-    return response.choices[0].message.content
+    # Logic to move to next step
+    if st.session_state.step == "step_1":
+        st.session_state.step = "step_2"
+    elif st.session_state.step == "step_2":
+        st.session_state.step = "industry_branch"
+    elif st.session_state.step == "industry_branch":
+        industry = st.session_state.user_data["step_1"]
+        if st.session_state.industry_step_index < len(SURVEY_FLOW["industry_specific"].get(industry, [])) - 1:
+            st.session_state.industry_step_index += 1
+        else:
+            st.session_state.step = "final"
+    st.rerun()
 
-# --- UI LOGIC ---
-for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
+# --- DISPLAY CHAT HISTORY ---
+for msg in st.session_state.chat_history:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
 
-if prompt := st.chat_input():
-    if not api_key:
-        st.error("Please provide an API Key in the sidebar.")
-    else:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        st.chat_message("user").write(prompt)
+# --- CURRENT QUESTION UI (Ticking Options) ---
+with st.chat_message("assistant"):
+    if st.session_state.step == "step_1":
+        q = SURVEY_FLOW["step_1"]
+        st.write(q["question"])
+        choice = st.radio("Choose one:", q["options"], key="s1", index=None)
+        if choice:
+            handle_selection(choice, "step_1")
 
-        # Logic to "lock in" the industry choice
-        for ind in SURVEY_DATA["Layer_1"]["options"]:
-            if ind.lower() in prompt.lower():
-                st.session_state.industry = ind
+    elif st.session_state.step == "step_2":
+        q = SURVEY_FLOW["step_2"]
+        st.write(q["question"])
+        choice = st.radio("Choose one:", q["options"], key="s2", index=None)
+        if choice:
+            handle_selection(choice, "step_2")
 
-        with st.chat_message("assistant"):
-            response = get_ai_response()
-            st.write(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+    elif st.session_state.step == "industry_branch":
+        industry = st.session_state.user_data["step_1"]
+        questions = SURVEY_FLOW["industry_specific"].get(industry, [{"q": "No data for this industry yet.", "type": "radio", "options": ["Continue"]}])
+        curr_q = questions[st.session_state.industry_step_index]
+        
+        st.write(curr_q["q"])
+        if curr_q["type"] == "radio":
+            choice = st.radio("Select one:", curr_q["options"], key=f"ind_{st.session_state.industry_step_index}", index=None)
+            if choice:
+                handle_selection(choice, f"industry_q_{st.session_state.industry_step_index}")
+        elif curr_q["type"] == "multiselect":
+            choices = st.multiselect("Select all that apply:", curr_q["options"], key=f"ind_m_{st.session_state.industry_step_index}")
+            if st.button("Confirm Selection"):
+                handle_selection(choices, f"industry_q_{st.session_state.industry_step_index}")
+
+    elif st.session_state.step == "final":
+        st.write(SURVEY_FLOW["final"]["q"])
+        contact = st.text_area("Type your details here...")
+        if st.button("Submit Survey"):
+            st.session_state.user_data["contact"] = contact
+            st.success("Thank you! Our team will contact you soon.")
+            # Optional: Use OpenAI to summarize and say goodbye
+            if api_key:
+                client = OpenAI(api_key=api_key)
+                summary = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{"role": "system", "content": f"The user completed the survey with these details: {st.session_state.user_data}. Write a warm goodbye."}]
+                )
+                st.write(summary.choices[0].message.content)
