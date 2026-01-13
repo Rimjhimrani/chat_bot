@@ -20,7 +20,7 @@ def reset_survey():
         del st.session_state[key]
     st.rerun()
 
-st.title("Supply Chain Organization Survey")
+st.title("Agilomatrix ChatBot")
 
 # --- LAYER 1: INDUSTRY ---
 if st.session_state.step == "industry_select":
